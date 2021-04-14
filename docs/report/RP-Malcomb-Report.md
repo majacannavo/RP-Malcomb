@@ -10,11 +10,11 @@ title: RP- Vulnerability modeling for sub-Saharan Africa
 Original study *by* Malcomb, D. W., E. A. Weaver, and A. R. Krakowka. 2014. Vulnerability modeling for sub-Saharan Africa: An operationalized approach in Malawi. *Applied Geography* 48:17–30. DOI:[10.1016/j.apgeog.2014.01.004](https://doi.org/10.1016/j.apgeog.2014.01.004)
 
 Replication Authors:
-Your Name, Joseph Holler, Kufre Udoh, Open Source GIScience students of fall 2019 and Spring 2021
+Maja Cannavo, Joseph Holler, Kufre Udoh, Open Source GIScience students of fall 2019 and Spring 2021
 
-Replication Materials Available at: [github repository name](github repository link)
+Replication Materials Available at: [majacannavo/RP-Malcomb](https://github.com/majacannavo/RP-Malcomb)
 
-Created: `DD Month YYYY`
+Created: `14 April 2021`
 Revised: `DD Month YYYY`
 
 ## Abstract
