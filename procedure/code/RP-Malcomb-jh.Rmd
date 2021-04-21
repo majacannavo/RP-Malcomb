@@ -9,7 +9,7 @@ output: html_document
 #### [https://doi.org/10.1016/j.apgeog.2014.01.004]([https://doi.org/10.1016/j.apgeog.2014.01.004)
 
 ### Authors: Kufre Udoh, Joseph Holler, and Middlebury College Spring 2019 Geography 323 class
-
+x
 ### [https://gis4dev.github.io/](https://gis4dev.github.io/)
 
 ```{r libraries, include = F}
@@ -37,6 +37,8 @@ sf_use_s2(T)
 
 private_r = here("data","raw","private")
 public_r = here("data","raw","public")
+
+# download data if it's not already downloaded
 
 if (!"traditional_authorities" %in% list.files(public_r)){
   # Malawi administrative areas from GADM version 2.8 https://gadm.org/download_country_v2.html
@@ -88,20 +90,23 @@ dhs_downloads = get_datasets(
 
 ```{r 2010 adaptive capacity data}
 ta = read_sf(here("data", "raw", "public","traditional_authorities", "MWI_adm2.shp")) %>%
+  # make geometries valid
   st_make_valid() 
 
 lhz = read_sf(here("data", "raw", "public", "livelihood_zones", "MW_LHZ_2009.shp")) %>% st_make_valid()
 
 dhsclusters_2010 = readRDS(dhs_downloads$MWGE62FL) %>%
   as("sf") %>% 
+  # transform projection
   st_transform(3395) %>% 
   # joining id for traditional authorities and livelihood zones to dhs clusters
   st_join(st_transform(select(ta, ID_2),3395)) %>%
   st_join(st_transform(select(lhz, FNID),3395)) %>%
+  # rename columns
   rename(ta_id = ID_2,
          lhz_id = FNID,
          urban_rural = URBAN_RURA)
-
+# drop labels
 dhshh_2010 = readRDS(dhs_downloads$MWHR61SV) %>% zap_labels() 
 ```
 
@@ -125,6 +130,7 @@ rmv_2010 = dhshh_2010 %>%  filter(
     HV226  == 95 |
     HV226  == 96 |
     HV207  ==  9 
+  # pull the HHID vector from the data frame
 ) %>% pull(HHID)
 ```
 
@@ -166,6 +172,7 @@ ta_capacity_2010 = dhshh_2010 %>%
   ungroup %>%
   # using percent_rank(), those  
   # in cases where desc() is used, having a greater value before ranked makes a household more vulnerable 
+  # for the quintile thing, rescale from 1 to 5 based on % rank
   mutate(
     livestock = percent_rank(hhlivestock) * 4 + 1,
     sick = percent_rank(desc(HV248)) * 4 + 1,
@@ -177,12 +184,13 @@ ta_capacity_2010 = dhshh_2010 %>%
     water = percent_rank(desc(HV204)) * 4 + 1,
     electricity = percent_rank(HV206) * 4 + 1,
     cooking = percent_rank(desc(HV226)) * 4 + 1,
+    # for sex, 1 is male and 2 is female
     sexcat = percent_rank(desc(HV219)) * 4 + 1,
     cellphone = percent_rank(desc(HV243A)) * 4 + 1,
     radio = percent_rank(HV207) * 4 + 1,
     urbanruralscore = ifelse(urban_rural == "U", 5, 1)
   ) %>%
-  # calculating capacity score based on table 2 in malcomb et al 
+  # calculating capacity score based on table 2 in malcomb et al--apply weights 
   rowwise %>%
   mutate(
     capacity = sum(
@@ -224,14 +232,16 @@ ta = left_join(
 )
 
 # making capacity score resemble malcomb et al's work 
-ta = mutate(ta, capacity_2010 = capacity_2010 * 20)
+# ta = mutate(ta, capacity_2010 = capacity_2010 * 20)
 # 256 features 
 
 # preparing breaks for mapping using natural jenks method
 ta_brks = filter(ta, !is.na(capacity_2010)) %>% {classIntervals(.$capacity_2010, 4, style = "jenks")$brks}
 
+# prepare intervals based on breaks
 ta_int = lapply(1:4, function(x) paste0(round(ta_brks[x],2)," - ", round(ta_brks[x +1],2))) %>% unlist()
 
+# assign to classes based on intervals 
 ta = mutate(ta, capacity_2010_brks = case_when(
   capacity_2010 <= ta_brks[2] ~ ta_int[1],
   capacity_2010 <= ta_brks[3] ~ ta_int[2],
@@ -270,6 +280,8 @@ b = st_bbox(
 ) %>%
   st_as_sfc()
 
+# dx and dy are the cell size in the x-direction and y-direction, respectively
+# dx and dy are each 1/24 of a degree
 blank = st_as_stars(st_bbox(b), dx = 0.041667, dy = 0.041667)
 blank[[1]][] = NA
 
@@ -277,9 +289,11 @@ blank[[1]][] = NA
 # use bilinear for drought to average continuous population exposure values
 dr = st_warp(dr, blank, use_gdal = T, method = "bilinear")
 # use nearest neighbor for flood risk to preserve integer values
+# st_warp is for resampling
 fl = st_warp(fl, blank, method = "near")  
 
 # removing factors from fl
+# double brackets leave out the column names 
 nmrc = as.numeric(levels(fl[[1]]))[fl[[1]]]
 fl = blank
 fl[[1]][] = nmrc
@@ -287,6 +301,7 @@ fl[[1]][] = nmrc
 
 ```{r rasterizing geometries}
 # clipping traditional authorities with livelihood zones in order to remove lake
+# they made their own st_clip function
 st_clip = function(x,y) st_intersection(x, st_union(st_geometry(y)))
 
 st_agr(ta) = "constant"
@@ -323,6 +338,7 @@ vulnerability = function(geo) {
         drought[[1]] <= qt[[5]] ~ 4,
         drought[[1]] > qt[[5]] ~ 5
       )
+      # 5*4 = 20
     ) %>% select(recoded) * 4
   
   # final output (adding component rasters)
