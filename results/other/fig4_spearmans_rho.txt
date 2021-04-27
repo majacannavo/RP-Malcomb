@@ -1,0 +1,8 @@
+Spearman's rank correlation rho
+
+data:  fig4compare$NEW_resil and fig4compare$rp_res
+S = 256068, p-value < 2.2e-16
+alternative hypothesis: true rho is not equal to 0
+sample estimates:
+     rho
+0.779495

@@ -117,7 +117,6 @@ dhshh_2010 = readRDS(here("data", "raw", "private", "datasets", "MWHR61SV.rds"))
 lhz_withData = read_sf(here("data", "derived", "private", "LHZ_withData.shp")) %>% st_make_valid()
 ```
 
-
 ```{r calculate livelihood sensitivity}
 
   # using percent_rank(), those  
@@ -303,11 +302,11 @@ fl = read_stars(here("data", "raw", "public",  "fl1010irmt.tif")) %>%
   st_set_crs(4326) 
 
 # georeferenced Malcomb et al. maps
-fig4_geo = read_stars(here("data", "derived", "private", "fig4pdf_georeferenced.tif")) %>%
-  st_set_crs(4326)
+# fig4_geo = read_stars(here("data", "derived", "private", "fig4pdf_georeferenced.tif")) %>%
+  # st_set_crs(4326)
 
-fig5_geo = read_stars(here("data", "derived", "private", "fig5pdf_georeferenced.tif")) %>%
-  st_set_crs(4326)
+# fig5_geo = read_stars(here("data", "derived", "private", "fig5pdf_georeferenced.tif")) %>%
+  # st_set_crs(4326)
 
 ```
 
@@ -341,16 +340,6 @@ fl = st_warp(fl, blank, method = "near")
 nmrc = as.numeric(levels(fl[[1]]))[fl[[1]]]
 fl = blank
 fl[[1]][] = nmrc
-```
-
-```{r loading my own 2010 adaptive capacity and vectorized overall resilience from the georeferencing/zonal stats tutorial}
-my_ta_resilience = read_sf(here("data", "derived", "public", "ta_resilience_newnew.shp")) %>%
-  # make geometries valid
-  st_make_valid() 
-
-my_vulnerability_grid = read_sf(here("data", "derived", "public", "georeferencing_vulnerability_grid.shp")) %>%
-  # make geometries valid
-  st_make_valid() 
 ```
 
 ```{r rasterizing geometries}
@@ -437,7 +426,6 @@ vulnerabilityFull = function(geo) {
 ```{r creating final vulnerability layers}
 ta_final = vulnerability(ta_capacity)
 ta_final_full = vulnerabilityFull(ta_capacity)
-
 
 ta_2010$vuln = aggregate(ta_final,ta_2010,mean)$capacity_2010
 ```
@@ -569,6 +557,183 @@ new_vuln_map = ggplot() +
 new_vuln_map
 ```
 
+```{r comparing my Figure 4 and Malcomb et al.'s Fig. 4}
+
+or_fig4 = # load original figure 4 data
+  read_sf(here("data", "derived", "public", "ta_resilience_newnew.shp")) %>% 
+  # load ta_resilience layer from georeferencing geopackage
+  st_drop_geometry() %>%
+  # remove the geometry data because two geometries cannot be joined
+  select(c(ID_2, NEW_resil)) %>%  
+  # select only the ID_2 and resilience columns
+  na.omit()
+  # remove records with null values
+
+rp_fig4 = ta_2010 %>% # prepare our reproduction of figure 4 data
+  select(c(ID_2,capacity_2010)) %>%  
+  # select only the ID_2 and resilience columns
+  # note: geometry columns are 'sticky' -- only way to remove is st_drop_geometry()
+  na.omit()  %>%
+  # remove records with null values
+  mutate(rp_res = case_when(
+  capacity_2010 <= ta_brks[2] ~ 1,
+  capacity_2010 <= ta_brks[3] ~ 2,
+  capacity_2010 <= ta_brks[4] ~ 3,
+  capacity_2010 >  ta_brks[4] ~ 4
+))
+# code the capacity scores as integers, as we see them classified on the map. 
+#ta_brks was the result of a Jenks classification, as noted on Malcomb et al's maps
+
+fig4compare = inner_join(rp_fig4,or_fig4,by="ID_2") %>%  
+  #inner join on field ID_2 keeps only matching records
+  filter(rp_res>0 & rp_res<5 & NEW_resil > 0 & NEW_resil < 5)
+  # keep only records with valid resilience scores
+
+table(fig4compare$NEW_resil,fig4compare$rp_res)
+# crosstabulation with frequencies
+
+cor.test(fig4compare$NEW_resil,fig4compare$rp_res,method="spearman", exact=FALSE)
+# Spearman's Rho correlation test
+
+fig4compare = mutate(fig4compare, difference = rp_res - NEW_resil) 
+# Calculate difference between the maps so that you can create a difference
+```
+
+```{r saving Fig. 4 difference table}
+# used the following website to figure out how to write an Excel file from a data frame, following Alitzel Villaneuva's suggestion to use the writexl package
+install.packages("writexl")
+library("writexl")
+write_xlsx(fig4compare, here("data", "derived", "public", "fig4compare1.xlsx"))
+```
+
+```{r make Fig. 4 difference map}
+
+# Thanks to Vincent Falardeau for tips on how to get the legend properly ordered!
+
+fig4_diff_map = ggplot() +
+  geom_sf(data = ea,
+          aes(fill = EA),
+          color = NA) +
+  geom_sf(
+    data = fig4compare,
+    aes(fill = factor(difference)),
+    color = "white",
+    lwd = .2
+  ) + scale_fill_manual (
+    limits = c("-2", 
+               "-1", 
+               "0", 
+               "1",
+               "Missing Data",
+               "National Parks and Reserves",
+               "Major Lakes of Malawi"),
+    values = c(
+      "-2" = "#feebe2",
+      "-1" = "#fbb4b9",
+      "0" = "#f768a1",
+      "1" = "#ae017e",
+      "Missing Data" = "#696969",
+      "National Parks and Reserves" = "#74c476",
+      "Major Lakes of Malawi" = "lightblue"
+    )
+  ) +
+  scale_x_continuous(breaks = c(33,34,35,36)) +
+  labs(title = "Adaptive Capacity Difference Between Reproduction and Original") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+fig4_diff_map
+```
+
+```{r comparing my Figure 5 and Malcomb et al.'s Fig. 5}
+
+orfig5vect = 
+  read_sf(here("data", "derived", "public", "georeferencing_vulnerability_grid.shp"))
+# load original figure 5 data
+
+orfig5rast = st_rasterize(orfig5vect["X_mean"], template=ta_final_full)
+# convert mean of blue values into a raster using ta_final_full as a reference for raster
+# extent, cell size, CRS, etc.
+
+orfig5rast = orfig5rast %>% 
+  mutate(or = 1-
+           (X_mean - min(orfig5rast[[1]], na.rm= TRUE)) /
+           (max(orfig5rast[[1]], na.rm= TRUE) -
+            min(orfig5rast[[1]], na.rm= TRUE)
+        )
+)  # or is Re-scaled from 0 to 1 with (value - min)/(max - min)
+# it is also inverted, because higher blue values are less red
+
+
+ta_final_full = ta_final_full %>% 
+  mutate(rp =
+           (capacity_2010 - min(ta_final_full[[1]], na.rm= TRUE)) /
+           (max(ta_final_full[[1]], na.rm= TRUE) -
+            min(ta_final_full[[1]], na.rm= TRUE)
+        )
+)  # rp is Re-scaled from 0 to 1 with (value - min)/(max - min)
+
+fig5comp = c( select(ta_final_full,"rp"), select(orfig5rast,"or"))
+# combine the original (or) fig 5 and reproduced (rp) fig 5
+
+fig5comp = fig5comp %>% mutate( diff = rp - or )
+# calculate difference between the original and reproduction,
+# for purposes of mapping
+
+fig5comppts = st_as_sf(fig5comp)
+# convert raster to vector points to simplify plotting and correlation testing
+
+plot(fig5comppts$or, fig5comppts$rp, xlab="Original Study", ylab="Reproduction")
+# create scatterplot of original results and reproduction results
+
+cor.test(fig5comppts$or, fig5comppts$rp, method="spearman", exact=FALSE)
+# Spearman's Rho correlation test
+
+# Hint for mapping raster results: refer to the diff raster attribute
+# in the fig5comp stars object like this: fig5comp["diff"]
+```
+
+```{r save fig5comp.tif}
+write_stars(fig5comp, here("data","derived","public","fig5comp.tif"))
+```
+
+```{r make Fig. 5 difference map}
+clrs = mutate(
+  ea,
+  colors = case_when(
+    EA == "Missing Data" ~ "#999999",
+    EA == "National Parks and Reserves" ~ "#D9EABB",
+    EA == "Major Lakes of Malawi" ~ "lightblue"
+  )
+)$colors
+
+fig5_diff_map = ggplot() +
+  geom_sf(data = ea,
+          fill = clrs,
+          color = NA) +
+  geom_stars(data = fig5comp) +
+  scale_fill_gradient(
+    low = "#efedf5",
+    high = "#54278f",
+    # breaks = c(18.1746,  26.5946),
+    breaks = c(min(fig5comp[[1]], na.rm = TRUE), max(fig5comp[[1]], na.rm = TRUE)),
+    labels = c("0", "1"),
+    na.value = "transparent",
+    guide = "colourbar",
+    limits = c(min(fig5comp[[1]], na.rm = TRUE), max(fig5comp[[1]], na.rm = TRUE))
+  ) +
+  scale_x_continuous(breaks = c(33,34,35,36)) +
+  labs(title = "Vulnerability Difference Between Reproduction and Original") +
+  theme_minimal() +
+  theme(
+    legend.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank()
+  )
+
+fig5_diff_map
+```
+
 ```{r saving maps}
 
 save(map_2010, vuln_map, new_vuln_map, file = here("results","maps","maps.Rdata"))
@@ -590,6 +755,20 @@ ggsave(
 ggsave(
   here("results","maps","vulnerability_full.png"),
   plot = new_vuln_map,
+  width = 8.5,
+  height = 11,
+  units = "in"
+)
+ggsave(
+  here("results", "maps", "fig4_diff_map.png"),
+  plot = fig4_diff_map,
+  width = 8.5,
+  height = 11,
+  units = "in"
+)
+ggsave(
+  here("results", "maps", "fig5_diff_map.png"),
+  plot = fig5_diff_map,
   width = 8.5,
   height = 11,
   units = "in"
