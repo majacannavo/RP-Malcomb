@@ -267,7 +267,7 @@ ta = left_join(
   by = c("ID_2" = "ta_id")
 )
 
-# making capacity score resemble malcomb et al's work 
+# making capacity score resemble malcomb et al's work--I chose to leave this step out
 # ta = mutate(ta, capacity_2010 = capacity_2010 * 20)
 # 256 features 
 
@@ -300,14 +300,6 @@ dr = read_stars(here("data", "raw", "public", "dr1010ipeykx.tif")) %>%
 
 fl = read_stars(here("data", "raw", "public",  "fl1010irmt.tif")) %>% 
   st_set_crs(4326) 
-
-# georeferenced Malcomb et al. maps
-# fig4_geo = read_stars(here("data", "derived", "private", "fig4pdf_georeferenced.tif")) %>%
-  # st_set_crs(4326)
-
-# fig5_geo = read_stars(here("data", "derived", "private", "fig5pdf_georeferenced.tif")) %>%
-  # st_set_crs(4326)
-
 ```
 
 ```{r cleaning and reprojecting rasters}
